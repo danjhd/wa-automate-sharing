@@ -1,0 +1,97 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Transform: AWS::Serverless-2016-10-31
+
+Description: Automate sharing of Well-Architected reviews across all linked accounts.
+
+Parameters:
+
+  RoleName:
+    Type: String
+    Description: The RoleName to assume in all linked accounts.
+    Default: WellArchitectedShares
+
+  ShareAccountId:
+    Type: String
+    Description: The AWS Account Id with which to share the Well-Architected reviews.
+
+  PermissionType:
+    Type: String
+    Default: READONLY
+    AllowedValues:
+      - READONLY
+      - CONTRIBUTOR
+
+Conditions:
+
+  AccountIdSupplied: !Not [!Equals [!Ref ShareAccountId, '']]
+
+Resources:
+
+  AssumeAccounts:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: assume_accounts/
+      Handler: app.lambda_handler
+      Runtime: python3.8
+      Timeout: 900
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - organizations:ListAccounts
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - sts:AssumeRole
+              Resource: !Sub arn:aws:iam::*:role/${RoleName}
+            - Effect: Allow
+              Action:
+                - sqs:SendMessage
+              Resource: !GetAtt AssumeAccountQueue.Arn
+      Events:
+        Schedule:
+          Type: Schedule
+          Properties:
+            Description: Daily CRON for WAR Share polling
+            Enabled: True
+            Schedule: rate(1 day)
+            Input: !Sub |
+              {
+                "Queues": ["${AssumeAccountQueue}"]
+              }
+      Environment:
+        Variables:
+          ROLE_NAME: !Ref RoleName
+
+  AssumeAccountQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 900
+
+  ShareWellArchitected:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: share_wellarchitected/
+      Handler: app.lambda_handler
+      Runtime: python3.8
+      Timeout: 900
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - ssm:GetParametersByPath
+              Resource: '*'
+      Events:
+        SQS:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt AssumeAccountQueue.Arn
+            BatchSize: 1
+            Enabled: True
+      Environment:
+        Variables:
+          ACCOUNT_ID: !If [AccountIdSupplied, !Ref ShareAccountId, !Ref AWS::AccountId]
+          PERMISSION_TYPE: !Ref PermissionType
