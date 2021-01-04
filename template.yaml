@@ -70,10 +70,10 @@ Resources:
     Properties:
       VisibilityTimeout: 900
 
-  ShareWellArchitected:
+  ShareWorkloads:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: share_wellarchitected/
+      CodeUri: share_workloads/
       Handler: app.lambda_handler
       Runtime: python3.8
       Timeout: 900

@@ -30,7 +30,7 @@ def lambda_handler(event, context):
                     MessageBody = json.dumps(assume_role, default=str)
                 )
         except ClientError as e:
-            print(f"{e.response['Error']['Code']}\t{account}")
+            logger.error(f"{e.response['Error']['Code']}\t{account}")
 
 def GetAccounts():
     org = boto3.client('organizations')

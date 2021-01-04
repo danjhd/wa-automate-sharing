@@ -57,7 +57,7 @@ def GetWorkloads(client):
             workloads.extend([w['WorkloadId'] for w in list_workloads['WorkloadSummaries']])
         return workloads
     except ClientError as e:
-        print(e)
+        logger.error(e)
         return []
 
 def GetRegions(ServiceName):
