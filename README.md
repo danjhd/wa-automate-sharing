@@ -34,7 +34,7 @@ In order to give scalability and resiliency to this solution we will be using 2 
 2. The [Automation Account](#automation-account) needs to have the ability to list all the [Member Accounts](#member-account) using the `ListAccounts` AWS API call, this operation can be called only from the organization’s [Management Account](#management-account) or by a [Member Account](#member-account) that is a [delegated administrator](https://docs.aws.amazon.com/organizations/latest/userguide/orgs_integrate_services_list.html) for an AWS service. In this article we are using an account that has been delegated administrator for the `AWS Audit Manager` service, however you can use any service you wish or may already have delegated.
 3. An IAM role in every [Member Account](#member-account) that can be assumed by the Automation Account
 
-Since the first 2 pre-requisites can vary depending on use case we will leave these parts to complete on your own. The third one we will walk through next. If you already have a role like this in place you can skip this part, but please check you have the required permssions.
+Since the first 2 pre-requisites can vary depending on use case we will leave these parts to complete on your own. The third one we will walk through next. If you already have a role like this in place you can skip this part, but please check you have the required permissions.
 
 ### Creating the required IAM role in all member accounts
 
@@ -114,7 +114,7 @@ Once cloned open a command prompt within the cloned repo folder and enter the fo
 sam build
 ```
 
-The next command will attempt to deploy the package into your AWS acccount. Since we wish this to run from the [Automation Account](#automation-account) it is important to make sure you have the relevant credentials to authenticate with this AWS account.
+The next command will attempt to deploy the package into your AWS account. Since we wish this to run from the [Automation Account](#automation-account) it is important to make sure you have the relevant credentials to authenticate with this AWS account.
 
 ```bash
 sam deploy --guided
@@ -126,7 +126,7 @@ During this guided deployment you will be asked for the following information:
 - AWS Region: *(enter your preferred AWS region name, for example `eu-west-1`)*
 - Parameter RoleName: *(leave this value as the default unless you changed it when deploying the StackSet or are using an existing role you have available.)*
 - Parameter ShareAccountId: *(enter the 12 digit account id for the [Reviews Account](#reviews-account))*
-- Paramter PermissionType: *(this can be either READONLY or CONTRIBUTOR, READONLY is default so only change this if desired.)*
+- Parameter PermissionType: *(this can be either READONLY or CONTRIBUTOR, READONLY is default so only change this if desired.)*
 
 All other prompts from the guided deployment should be left as their default values.
 
@@ -136,19 +136,19 @@ Once you have completed all the prompts you will see the progress of the deploym
 
 Before we proceed with a little testing of the solution we should take a quick look at the resources that SAM CLI deployed for us.
 
-- SQS Queue - If you visit the SQS Console in your chosen region (in the [Automation Account](#automation-account) of course). You should see an new SQS queue with a name containing `AssumeAccountQueue` this is the queue that receives mesages from our first Lambda function and allows the *fanout* behaviour of the solution.
+- SQS Queue - If you visit the SQS Console in your chosen region (in the [Automation Account](#automation-account) of course). You should see an new SQS queue with a name containing `AssumeAccountQueue` this is the queue that receives messages from our first Lambda function and allows the *fanout* behaviour of the solution.
 - Lambda Functions - If you visit the Lambda Console you should see 2 new functions with names containing `AssumeAccounts` and `ShareWorkloads` respectively. These names match with the names shown in the high-level diagram earlier in this article.
-- CloudWatch Event Rule - If you visit the CloudWatch Console and look at the `Rules` under the `Events` section you shoudl see a new Rule with a name containing `AssumeAccountsSchedule`. This is the schedule rule that will trigger every day. If you take a closer look at the Rule configuration, you will see that it has an JSON document as it's input that that JSON contains an array of `Queues` this is an array of SQS Queues that will be populated with the temporary account credentials for each [Member Account](#member-account). If you have any other automation requirements where you wish to loop over your [Member Accounts](#member-account) you can amend this Rule (or create a new one) allowing you to have other Lambda function automate actions within [Member Accounts](#member-account), however this is beyond the scope of this article, we just mention it as it might be useful for you!
+- CloudWatch Event Rule - If you visit the CloudWatch Console and look at the `Rules` under the `Events` section you should see a new Rule with a name containing `AssumeAccountsSchedule`. This is the schedule rule that will trigger every day. If you take a closer look at the Rule configuration, you will see that it has an JSON document as it's input that that JSON contains an array of `Queues` this is an array of SQS Queues that will be populated with the temporary account credentials for each [Member Account](#member-account). If you have any other automation requirements where you wish to loop over your [Member Accounts](#member-account) you can amend this Rule (or create a new one) allowing you to have other Lambda function automate actions within [Member Accounts](#member-account), however this is beyond the scope of this article, we just mention it as it might be useful for you!
 
 ## Test the Solution
 
 There are several ways to test this solution, the method you prefer will depend on your level of comfort with AWS Lambda Functions. For the purposes of this article we will show the easiest method, however this does mean waiting for the schedule to execute, which it does every 24 hours, so feel free to do your own testing if you are comfortable with it.
 
-The first test is very simple as it requires no action at all. Just wait for 24 hours and then review the CloudWatch Logs for the `AssumeAccounts` function. The logs should show a line for every for every [Member Account](#member-account) and the SQS Queue URL. If the function encounters any problems it will show an ERROR line in then logs. The most likley error you will see will be `AccessDenied` this relates to the Lambda function being unable to assume the IAM role in the [Member Account](#member-account) and so may be expected in which case you can ignore the error, or corrected by checking the role does exist with the require permissions and name.
+The first test is very simple as it requires no action at all. Just wait for 24 hours and then review the CloudWatch Logs for the `AssumeAccounts` function. The logs should show a line for every for every [Member Account](#member-account) and the SQS Queue URL. If the function encounters any problems it will show an ERROR line in then logs. The most likely error you will see will be `AccessDenied` this relates to the Lambda function being unable to assume the IAM role in the [Member Account](#member-account) and so may be expected in which case you can ignore the error, or corrected by checking the role does exist with the require permissions and name.
 
 **If you see a message relating to the Lambda function not being able to `ListAccounts` this relates to the fact that you have not met pre-requisite (2) above. Please review that and then re-test**
 
-After reviewing the `AssumeAccounts` function logs, you should next review the logs for the `ShareWorkloads` function. Due to the *fanout* nature of this solution you will find 1 log stream for every [Member Account](#member-account) so you will have several logs to review depending on the number of accounts you have and also whether you already have any Well-Architected Workloads present in those accounts. However to test the solution you should finds that reviewing just one of the log streams will be sufficient. Looking into the logs for just one of yout accounts will show first a line that shows the account beign processed so that you can easily determine it for any debugging. Next you will see a line for each region as it loops through all supported regions. If it find a workload you will then see details of it and whether it was shared or not.
+After reviewing the `AssumeAccounts` function logs, you should next review the logs for the `ShareWorkloads` function. Due to the *fanout* nature of this solution you will find 1 log stream for every [Member Account](#member-account) so you will have several logs to review depending on the number of accounts you have and also whether you already have any Well-Architected Workloads present in those accounts. However to test the solution you should finds that reviewing just one of the log streams will be sufficient. Looking into the logs for just one of your accounts will show first a line that shows the account being processed so that you can easily determine it for any debugging. Next you will see a line for each region as it loops through all supported regions. If it find a workload you will then see details of it and whether it was shared or not.
 
 **Please note that is is very possible you will see `UnrecognizedClientException` errors in the logs for some regions. This is expected if you do not have the AWS optional regions enabled in your accounts. You can resolve this problem by following the [Enabling a Region](https://docs.aws.amazon.com/general/latest/gr/rande-manage.html) steps for the region showing the error.**
 
